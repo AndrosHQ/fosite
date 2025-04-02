@@ -78,10 +78,21 @@ func (c *AuthorizeExplicitGrantHandler) HandleTokenEndpointRequest(ctx context.C
 	// ensure that the "redirect_uri" parameter is present if the
 	// "redirect_uri" parameter was included in the initial authorization
 	// request as described in Section 4.1.1, and if included ensure that
-	// their values are identical.
+	// their values are identical, unless PKCE is used with a single redirect_uri
+	// per draft-ietf-oauth-v2-1-09
 	forcedRedirectURI := authorizeRequest.GetRequestForm().Get("redirect_uri")
-	if forcedRedirectURI != "" && forcedRedirectURI != request.GetRequestForm().Get("redirect_uri") {
-		return errorsx.WithStack(fosite.ErrInvalidGrant.WithHint("The \"redirect_uri\" from this request does not match the one from the authorize request."))
+	redirectURI := request.GetRequestForm().Get("redirect_uri")
+	if forcedRedirectURI != "" {
+		if redirectURI == "" && request.GetRequestForm().Get("code_verifier") != "" {
+			clientRedirectURIs := request.GetClient().GetRedirectURIs()
+			if len(clientRedirectURIs) == 1 && clientRedirectURIs[0] == forcedRedirectURI {
+				// Allow omitted redirect_uri for PKCE with single matching redirect_uri
+			} else {
+				return errorsx.WithStack(fosite.ErrInvalidGrant.WithHint("The \"redirect_uri\" is missing in this request but required to match the one from the authorize request, or the client’s registered redirect_uris do not match."))
+			}
+		} else if redirectURI != forcedRedirectURI {
+			return errorsx.WithStack(fosite.ErrInvalidGrant.WithHint("The \"redirect_uri\" from this request does not match the one from the authorize request."))
+		}
 	}
 
 	// Checking of POST client_id skipped, because:
