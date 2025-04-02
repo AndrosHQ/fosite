@@ -424,8 +424,14 @@ func (f *Fosite) newAuthorizeRequest(ctx context.Context, r *http.Request, isPAR
 	// https://tools.ietf.org/html/rfc6819#section-4.4.1.8
 	// The "state" parameter should not	be guessable
 	if len(request.State) < f.GetMinParameterEntropy(ctx) {
-		// We're assuming that using less then, by default, 8 characters for the state can not be considered "unguessable"
-		return request, errorsx.WithStack(ErrInvalidState.WithHintf("Request parameter 'state' must be at least be %d characters long to ensure sufficient entropy.", f.GetMinParameterEntropy(ctx)))
+		// Per draft-ietf-oauth-v2-1-10, state is not required
+		// For securty conservatism, only relax requirement if this is a PKCE request
+		// (as indicated by the code_challenge parameter)
+		if request.Form.Get("code_challenge") == "" {
+			// We're assuming that using less then, by default, 8 characters for the state can not be considered "unguessable"
+			return request, errorsx.WithStack(ErrInvalidState.WithHintf("Request parameter 'state' must be at least be %d characters long to ensure sufficient entropy.", f.GetMinParameterEntropy(ctx)))
+		}
+
 	}
 
 	return request, nil
